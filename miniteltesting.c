@@ -1,17 +1,18 @@
-#include	<sys/socket.h>
-#include	<netinet/in.h>
-#include	<arpa/inet.h>
-#include	<sys/types.h>
-#include	<sys/wait.h>
-#include	<signal.h>
-#include 	<stdio.h>
-#include 	<stdlib.h>
-#include 	<errno.h>
-#include 	<string.h>
-#include	<unistd.h>
-#include 	<sys/time.h>
+#include    <sys/socket.h>
+#include    <netinet/in.h>
+#include    <arpa/inet.h>
+#include    <sys/types.h>
+#include    <sys/wait.h>
+#include    <signal.h>
+#include    <stdio.h>
+#include    <stdlib.h>
+#include    <errno.h>
+#include    <string.h>
+#include    <unistd.h>
+#include    <sys/time.h>
 //Fonction pouvant déterminer le maximum entre 2 entier
-#define	max(a,b)	((a) > (b) ? (a) : (b))
+#define max(a,b)    ((a) > (b) ? (a) : (b))
+#define BUFLEN 1024
 
 void str_cli(FILE *, int);
 
@@ -30,10 +31,10 @@ void help(){
   printf("-V, --version              print program version\n");
 }
 
-int createSock(ip_version,host,port){
+int createSock(char* ip_version,char* host,char* port){
   int sockfd;
   struct sockaddr_in servaddr;
-  if(ip_version="ipv6"){
+  if(strcmp(ip_version, "ipv6")==0){
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     bzero(&servaddr, sizeof(servaddr));
@@ -42,7 +43,7 @@ int createSock(ip_version,host,port){
     inet_pton(AF_INET, host, &servaddr.sin_addr);
     connect(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
   }
-  if(ip_version="ipv4"){
+  if(strcmp(ip_version,"ipv4")==0){
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     bzero(&servaddr, sizeof(servaddr));
@@ -55,55 +56,92 @@ int createSock(ip_version,host,port){
 }
 
 void transferData(int socketfd){
-   //Initialisationd des variables
-   //Création du set de déscripteurs de fichiers
-   fd_set rfds;
-   //Création de notre structure pour utiliser time
-   struct timeval tv;
-   int retval;
-   int maxfdp1;
-   char sendline[150];
-   int n;
- 
-   /* Regarde dans l'entrée standard si il y a des données entrées */
-   for( ; ; ){
-     FD_ZERO(&rfds);
-     FD_SET(socketfd, &rfds);
-     maxfdp1 = max(fileno(stdin),socketfd) + 1;
- 
-     /* Attend jusqu'à 30 secondes */
-     tv.tv_sec = 30;
-     tv.tv_usec = 0;
- 
-     retval = select(maxfdp1, &rfds, NULL, NULL, &tv);
-     /* Don't rely on the value of tv now! */
-     if (retval == -1){
-       perror("select()");
-     }
-     else if (retval){
-       printf("Data is available now.\n");
-       /* FD_ISSET(0, &rfds) will be true. */
-       shutdown(sockfd,SHUT_WR);
-       write(sockfd, sendline,n);
-     }
-     else {
-       printf("No data within five seconds.\n");
-     }
-   }exit(EXIT_SUCCESS);
+    //Initialisationd des variables
+    unsigned char buf[BUFLEN + 1];
+    //Création du set de déscripteurs de fichiers
+    fd_set rfds;
+    //Création de notre structure pour utiliser time
+    struct timeval tv;
+    int retval;
+    int maxfdp1;
+    char sendline[150];
+    int n;
+
+    //init buffer
+    memset(buf, 0, sizeof(buf));
+
+    /* Regarde dans l'entrée standard si il y a des données entrées */
+    for( ; ; ){
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        if (socketfd != 0)
+            FD_SET(socketfd, &rfds);
+        FD_SET(0, &rfds);
+
+        //maxfdp1 = max(fileno(stdin),socketfd) + 1;
+
+        /* Attend jusqu'à 30 secondes */
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
+
+        retval = select(socketfd+1, &rfds, (fd_set *) 0, (fd_set *) 0, &tv);
+        /* Don't rely on the value of tv now! */
+        if (retval == -1){
+            perror("select()");
+        }
+        else if (socketfd != 0 && FD_ISSET(socketfd, &rfds)) {
+            int rv;
+            if ((rv = recv(socketfd , buf , 1 , 0)) < 0)
+                return 1;
+            else if (rv == 0) {
+                printf("Connection closed by the remote end\n\r");
+                return 0;
+            }
+            else
+            {
+                printf("%s", buf);
+                //cleaning buf
+                memset(buf, 0, sizeof(buf));
+            }
+        }
+        else if (FD_ISSET(0, &rfds))
+        {
+            if(fgets(buf, sizeof(buf), stdin) == NULL)
+                return 1;
+
+            //write in socket
+            write(socketfd, buf, strlen(buf));
+            
+            //show cmd sended
+            printf("> Envoi: %s\n", buf);
+            
+            //flush stdout
+            fflush(stdout);
+
+            //cleaning buf
+            memset(buf, 0, sizeof(buf));
+        }
+        else {
+            printf("No data within five seconds.\n");
+        }
+    }
+    exit(EXIT_SUCCESS);
 }
 
-
-
 int main(int argc, char **argv){
-  int i;
-  char* argzz[argc]; 
-    for (i=0; i < argc; i++)
-    {
-        printf("Argument %ld : %s \n", i+1, argv[i]);
-        argzz[i]==argv[i];
-        printf("%s",argzz[i]);
+    
+    if (argc < 2 || argc > 3) {
+        printf("Usage: %s IP PORT\n", argv[0]);
+        return 1;
     }
-
+    
+    int sock = createSock("ipv4", argv[1], argv[2]);
+    if(sock == -1)
+    {
+        perror("createSock() Failed!");
+        return 1;
+    }
+    transferData(sock);
 
     /*if(argv[1]=="--help\0"||argv[1]=="-h"){
       help();
@@ -127,7 +165,6 @@ int main(int argc, char **argv){
   else{
     fp=stdin;
   }*/
-  transferData(createSock(argIp,argHost,argPort));
 
   exit(0);
 }
