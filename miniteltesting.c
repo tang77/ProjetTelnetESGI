@@ -25,7 +25,7 @@ void usage(){
   printf("Usage: minitel [OPTIONS] [HOST [PORT]] [INPUT DATA]\n");
 }
 void help(){
-  printf("Usage: minitel [OPTIONS] [HOST [PORT]] [INPUT DATA]\n");
+  usage();
   printf("Login to remote system HOST (optionally, on service port PORT)\n\n");
   printf("General options :\n\n");
   printf("-4, --ipv4                 use only IPv4\n");
@@ -101,7 +101,8 @@ int watchFD(int socketfd){
     memset(buf, 0, sizeof(buf));
 
     /* Regarde dans l'entrée standard si il y a des données entrées */
-    for( ; ; ){
+    for( ; ; )
+    {
         fd_set rfds;
         FD_ZERO(&rfds);
         if (socketfd != 0)
@@ -183,8 +184,8 @@ void sendBONJ(int sock)
 int main(int argc, char **argv){
     
     if (argc < 2 || argc > 3) {
-        printf("Usage: %s IP PORT\n", argv[0]);
-        return 1;
+        usage();
+	return 1;
     }
     
     int sock = createSock("ipv4", argv[1], argv[2]);
