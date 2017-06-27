@@ -13,8 +13,13 @@
 //Fonction pouvant déterminer le maximum entre 2 entier
 #define max(a,b)    ((a) > (b) ? (a) : (b))
 #define BUFLEN 1024
+#define MAXCMD 255
+#define MAXLOGPWD 32
 
-void str_cli(FILE *, int);
+#define CMD    0xFF
+#define BONJ   0x41
+#define WHO    0x42
+#define PASSWD 0x43
 
 void usage(){
   printf("Usage: minitel [OPTIONS] [HOST [PORT]] [INPUT DATA]\n");
@@ -55,7 +60,35 @@ int createSock(char* ip_version,char* host,char* port){
   return sockfd;
 }
 
-void transferData(int socketfd){
+void handle_who_msg(int sock)
+{
+    char tmp[MAXLOGPWD] = "";
+ 
+    while(strlen(tmp)<=0)
+    {
+        printf("LOGIN:\n");
+        fgets(tmp, sizeof(tmp), stdin);
+    }
+
+    if(send(sock, tmp, sizeof(tmp), 0)<0)
+        exit(1);
+}
+
+void handle_passwd_msg(int sock)
+{
+    char tmp[MAXLOGPWD] = "";
+ 
+    while(strlen(tmp)<=0)
+    {
+        printf("PASSWORD:\n");
+        fgets(tmp, sizeof(tmp), stdin);
+    }
+
+    if(send(sock, tmp, sizeof(tmp), 0)<0)
+        exit(1);
+}
+
+int watchFD(int socketfd){
     //Initialisationd des variables
     unsigned char buf[BUFLEN + 1];
     //Création du set de déscripteurs de fichiers
@@ -63,9 +96,6 @@ void transferData(int socketfd){
     //Création de notre structure pour utiliser time
     struct timeval tv;
     int retval;
-    int maxfdp1;
-    char sendline[150];
-    int n;
 
     //init buffer
     memset(buf, 0, sizeof(buf));
@@ -78,10 +108,8 @@ void transferData(int socketfd){
             FD_SET(socketfd, &rfds);
         FD_SET(0, &rfds);
 
-        //maxfdp1 = max(fileno(stdin),socketfd) + 1;
-
         /* Attend jusqu'à 30 secondes */
-        tv.tv_sec = 5;
+        tv.tv_sec = 30;
         tv.tv_usec = 0;
 
         retval = select(socketfd+1, &rfds, (fd_set *) 0, (fd_set *) 0, &tv);
@@ -91,17 +119,32 @@ void transferData(int socketfd){
         }
         else if (socketfd != 0 && FD_ISSET(socketfd, &rfds)) {
             int rv;
-            if ((rv = recv(socketfd , buf , 1 , 0)) < 0)
+            
+            if ((rv = recv(socketfd , buf, 1, 0)) < 0)
+            {
                 return 1;
-            else if (rv == 0) {
+            }
+            else if (rv == 0)
+            {
                 printf("Connection closed by the remote end\n\r");
                 return 0;
             }
-            else
+            switch(buf[0])
             {
-                printf("%s", buf);
-                //cleaning buf
-                memset(buf, 0, sizeof(buf));
+                case CMD:
+                    //do CMD
+                    break;
+                case WHO:
+                    printf("Server sended [WHO] message\n");
+                    handle_who_msg(socketfd);
+                    break;
+                case PASSWD:
+                    printf("Server sended [PASSWD] message\n");
+                    handle_passwd_msg(socketfd);
+                default:
+                    printf("%s\n", buf);
+                    //cleaning buf
+                    memset(buf, 0, sizeof(buf));
             }
         }
         else if (FD_ISSET(0, &rfds))
@@ -122,10 +165,19 @@ void transferData(int socketfd){
             memset(buf, 0, sizeof(buf));
         }
         else {
-            printf("No data within five seconds.\n");
+            //printf("No data within five seconds.\n");
+            continue;
         }
     }
     exit(EXIT_SUCCESS);
+}
+
+void sendBONJ(int sock)
+{
+    unsigned char tmp[1];
+    memset(tmp, BONJ, 1);
+    if(send(sock, tmp, 1, 0)<0)
+        exit(1);
 }
 
 int main(int argc, char **argv){
@@ -141,30 +193,12 @@ int main(int argc, char **argv){
         perror("createSock() Failed!");
         return 1;
     }
-    transferData(sock);
 
-    /*if(argv[1]=="--help\0"||argv[1]=="-h"){
-      help();
-      exit(-1);
-    }
-    else if(argv[1]=="--version\0"||argv[1]=="-v"){
-      printf("Minitel Version 0.0.1\n");
-      printf("Authors : SUEUR Tanguy / VERNHET Anthony");
-    }
-    else if{
-      usage();
-      exit(-1);
-    }
-    else{
+    //envoie bonj pour init le handshake
+    sendBONJ(sock);
 
-    }
-  
-  if (strcmp(argv[argc],"stdin")!=0){
-    fp=fopen(argv[argc],"r");
-  }
-  else{
-    fp=stdin;
-  }*/
+    //on surveille nos descripteur
+    watchFD(sock);
 
   exit(0);
 }
