@@ -62,23 +62,26 @@ int createSock(char* ip_version,char* host,char* port){
 
 void handle_who_msg(int sock)
 {
-    char tmp[MAXLOGPWD] = "";
+    char buflogin[MAXLOGPWD];
  
-    while(strlen(tmp)<=0)
+    while(1)
     {
         printf("LOGIN:\n");
-        fgets(tmp, sizeof(tmp), stdin);
+        fgets(buflogin, sizeof(buflogin), stdin);
+        if(strlen(buflogin)>1)
+            break;
     }
 
-    if(send(sock, tmp, sizeof(tmp), 0)<0)
-        exit(1);
+    printf("size:%d\n", strlen(buflogin));
+
+    write(sock, buflogin, strlen(buflogin)-1);
 }
 
 void handle_passwd_msg(int sock)
 {
     char tmp[MAXLOGPWD] = "";
  
-    while(strlen(tmp)<=0)
+    while(strlen(tmp)>1)
     {
         printf("PASSWORD:\n");
         fgets(tmp, sizeof(tmp), stdin);
@@ -142,22 +145,22 @@ int watchFD(int socketfd){
                 case PASSWD:
                     printf("Server sended [PASSWD] message\n");
                     handle_passwd_msg(socketfd);
+                    break;
                 default:
-                    printf("%s\n", buf);
-                    //cleaning buf
-                    memset(buf, 0, sizeof(buf));
+                    printf("%s", buf);        
             }
+            //cleaning buf
+            memset(buf, 0, sizeof(buf));
         }
         else if (FD_ISSET(0, &rfds))
         {
             if(fgets(buf, sizeof(buf), stdin) == NULL)
                 return 1;
 
+            printf("2nd write\n");
+
             //write in socket
             write(socketfd, buf, strlen(buf));
-            
-            //show cmd sended
-            printf("> Envoi: %s\n", buf);
             
             //flush stdout
             fflush(stdout);
@@ -175,10 +178,8 @@ int watchFD(int socketfd){
 
 void sendBONJ(int sock)
 {
-    unsigned char tmp[1];
-    memset(tmp, BONJ, 1);
-    if(send(sock, tmp, 1, 0)<0)
-        exit(1);
+    char tmp[] = {BONJ};
+    write(sock, tmp, 1);
 }
 
 int main(int argc, char **argv){
